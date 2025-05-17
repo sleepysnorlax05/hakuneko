@@ -145,6 +145,10 @@
                     <i class$="fas fa-fw button [[ getChapterDownloadClass(item.status) ]]" on-click="onProcessChapterClick" title$="[[ getChapterDownloadTooltip(item.status) ]]"></i>
                     <i class="far fa-fw fa-image button" style$="[[ getPagePreviewStyle(readerEnabled) ]]" on-click="onSelectChapterClick" title="Show preview of chapter's pages"></i>
                     <i class$="fa-fw fa-bookmark button [[ getChapterMarkClass(markedChapter, item) ]]" on-click="onMarkChapterClick" title$="[[ getChapterMarkTooltip(markedChapter, item) ]]"></i>
+                    <!-- Send to Kindle button: only for completed .epub/.pdf -->
+                    <template is="dom-if" if="[[ isSendToKindleEligible(item) ]]">
+                        <i class="fas fa-fw fa-paper-plane button" title="Send to Kindle" on-click="onSendToKindleClick"></i>
+                    </template>
                     <span class$="title [[ item.status ]]" title$="[[ item.title ]]&#10;Doubleclick to open the folder with your file manager" on-dblclick="onShowFileManagerClick">[[ item.title ]]</span>
                 </li>
             </template>
@@ -595,6 +599,35 @@
                 });
                 if( index > -1 ) {
                     this.notifyPath( 'chapterList.' + index + '.status' );
+                }
+            }
+
+            // Helper to check if chapter is eligible for Send to Kindle
+            isSendToKindleEligible(chapter) {
+                if (!chapter || chapter.status !== 'completed') return false
+                try {
+                    const path = Engine.Storage._chapterOutputPath(chapter)
+                    return path.endsWith('.epub') || path.endsWith('.pdf')
+                } catch {
+                    return false
+                }
+            }
+
+            // Handler for Send to Kindle button
+            async onSendToKindleClick(e) {
+                e.stopPropagation()
+                e.preventDefault()
+                const chapter = e.model.item
+                const path = Engine.Storage._chapterOutputPath(chapter)
+                if (!path.endsWith('.epub') && !path.endsWith('.pdf')) return
+                if (window.require) {
+                    const ipc = window.require('electron').ipcRenderer
+                    const result = await ipc.invoke('send-to-kindle', { filePath: path, title: chapter.title })
+                    if (result.success) {
+                        alert('Sent to Kindle (if credentials are set and file is valid).')
+                    } else {
+                        alert('Failed to send: ' + (result.error || 'Unknown error'))
+                    }
                 }
             }
         }

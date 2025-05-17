@@ -32,6 +32,11 @@ const types = {
     directory: 'directory'
 };
 
+let ipcRenderer
+try {
+    ipcRenderer = require('electron').ipcRenderer
+} catch {}
+
 export default class Settings extends EventTarget {
 
     // TODO: use dependency injection instead of globals for Engine.Storage, Engine.Conenctors
@@ -352,8 +357,9 @@ export default class Settings extends EventTarget {
     async load() {
         try {
             let data = await Engine.Storage.loadConfig('settings');
-            // apply general settings
+            // apply general settings (exclude Kindle fields)
             for (let key in this) {
+                if (['kindleGmailAddress', 'kindleGmailAppPassword', 'kindleEmail'].includes(key)) continue;
                 if (data
                     && data[key] !== undefined
                     && this[key]
@@ -362,6 +368,13 @@ export default class Settings extends EventTarget {
                     this[key].value = this._getDecryptedValue(this[key].input, data[key]);
                     this[key].value = this._getValidValue('General', this[key]);
                 }
+            }
+            // Load Kindle credentials securely
+            if (ipcRenderer) {
+                const creds = await ipcRenderer.invoke('kindle-credentials:get')
+                this.kindleGmailAddress.value = creds.gmail || ''
+                this.kindleGmailAppPassword.value = creds.appPassword || ''
+                this.kindleEmail.value = creds.kindleEmail || ''
             }
             // apply settings to each connector
             for (let connector of Engine.Connectors) {
@@ -386,11 +399,20 @@ export default class Settings extends EventTarget {
     async save() {
         try {
             let data = {};
-            // gather general settings
+            // gather general settings (exclude Kindle fields)
             for (let key in this) {
+                if (['kindleGmailAddress', 'kindleGmailAppPassword', 'kindleEmail'].includes(key)) continue;
                 if (this[key] && this[key].input && this[key].input !== types.disabled) {
                     data[key] = this._getEncryptedValue(this[key].input, this[key].value);
                 }
+            }
+            // Save Kindle credentials securely
+            if (ipcRenderer) {
+                await ipcRenderer.invoke('kindle-credentials:set', {
+                    gmail: this.kindleGmailAddress.value,
+                    appPassword: this.kindleGmailAppPassword.value,
+                    kindleEmail: this.kindleEmail.value
+                })
             }
             // gather settings from each connector
             data['connectors'] = {};

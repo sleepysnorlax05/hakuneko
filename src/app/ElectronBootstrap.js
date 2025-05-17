@@ -5,6 +5,9 @@ const { ConsoleLogger } = require('@logtrine/logtrine');
 const urlFilterAll = { urls: ['http://*/*', 'https://*/*'] };
 const trayTooltipMinimize = 'HakuNeko\nClick to hide window';
 const trayTooltipRestore = 'HakuNeko\nClick to show window';
+const kindleCredentials = require('./kindle-credentials')
+const { ipcMain } = require('electron')
+const nodemailer = require('nodemailer')
 
 module.exports = class ElectronBootstrap {
 
@@ -37,6 +40,55 @@ module.exports = class ElectronBootstrap {
         this._minimizeToTray = false; // only supported when tray is shown
         this._showTray = false;
         this._tray;
+
+        // IPC handlers for Kindle credentials
+        ipcMain.handle('kindle-credentials:get', async () => {
+            return kindleCredentials.getKindleCredentials()
+        })
+        ipcMain.handle('kindle-credentials:set', async (event, creds) => {
+            await kindleCredentials.setKindleCredentials(creds)
+            return { success: true }
+        })
+        ipcMain.handle('kindle-credentials:delete', async () => {
+            await kindleCredentials.deleteKindleCredentials()
+            return { success: true }
+        })
+        ipcMain.handle('send-to-kindle', async (event, { filePath, title }) => {
+            try {
+                const creds = await kindleCredentials.getKindleCredentials()
+                if (!creds.gmail || !creds.appPassword || !creds.kindleEmail) {
+                    throw new Error('Missing Kindle email credentials. Please set them in settings.')
+                }
+                // Validate file extension
+                if (!filePath.endsWith('.epub') && !filePath.endsWith('.pdf')) {
+                    throw new Error('Only .epub and .pdf files are supported.')
+                }
+                // Create transporter
+                const transporter = nodemailer.createTransport({
+                    service: 'gmail',
+                    auth: {
+                        user: creds.gmail,
+                        pass: creds.appPassword
+                    }
+                })
+                // Send mail
+                await transporter.sendMail({
+                    from: creds.gmail,
+                    to: creds.kindleEmail,
+                    subject: title || 'Manga Chapter',
+                    text: 'Sent from HakuNeko',
+                    attachments: [
+                        {
+                            filename: require('path').basename(filePath),
+                            path: filePath
+                        }
+                    ]
+                })
+                return { success: true }
+            } catch (error) {
+                return { success: false, error: error.message }
+            }
+        })
     }
 
     /**
