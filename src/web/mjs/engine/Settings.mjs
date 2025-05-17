@@ -282,6 +282,26 @@ export default class Settings extends EventTarget {
             ],
             value: 'Light',
         };
+
+        // Send to Kindle settings
+        this.kindleGmailAddress = {
+            label: 'Gmail Address for Kindle',
+            description: 'Enter your Gmail address used to send manga to your Kindle.',
+            input: types.text,
+            value: ''
+        };
+        this.kindleGmailAppPassword = {
+            label: 'Gmail App Password',
+            description: 'Enter your Gmail app password (not your regular password) for sending emails to Kindle. You can generate this in your Google Account security settings.',
+            input: types.password,
+            value: ''
+        };
+        this.kindleEmail = {
+            label: 'Kindle Email Address',
+            description: 'Enter your Kindle email address (must end with @kindle.com).',
+            input: types.text,
+            value: ''
+        };
     }
 
     NovelColorProfile() {
@@ -298,10 +318,23 @@ export default class Settings extends EventTarget {
     }
 
     *_getCategorizedSettings() {
+        // General settings (exclude Kindle fields)
         yield {
             category: 'General',
-            settings: [...this]
+            settings: Object.keys(this)
+                .filter(key => this[key] && this[key].input && !['kindleGmailAddress', 'kindleGmailAppPassword', 'kindleEmail'].includes(key))
+                .map(key => this[key])
         };
+        // Send to Kindle settings
+        yield {
+            category: 'Send to Kindle',
+            settings: [
+                this.kindleGmailAddress,
+                this.kindleGmailAppPassword,
+                this.kindleEmail
+            ]
+        };
+        // Connector settings
         for (let connector of Engine.Connectors) {
             if (connector.config instanceof Object) {
                 yield {
